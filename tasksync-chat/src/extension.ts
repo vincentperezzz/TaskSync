@@ -5,6 +5,7 @@ import {
 } from "./constants/remoteConstants";
 import { ContextManager } from "./context";
 import { TaskSyncIpcBridge } from "./mcp/ipcBridge";
+import { promptInstallAntigravityMcp } from "./mcp/mcpConfigInstaller";
 import { TaskSyncMcpServer } from "./mcp/mcpServer";
 import { RemoteServer } from "./server/remoteServer";
 import { getSafeErrorMessage } from "./server/serverUtils";
@@ -76,6 +77,9 @@ export function activate(context: vscode.ExtensionContext): void {
 			getSafeErrorMessage(err),
 		);
 	});
+
+	// Check and prompt Antigravity configuration if applicable
+	promptInstallAntigravityMcp(context);
 
 	// Send current TaskSync input command (for Keyboard Shortcuts)
 	const sendMessageCmd = vscode.commands.registerCommand(
