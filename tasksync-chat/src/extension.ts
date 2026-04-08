@@ -4,15 +4,21 @@ import {
 	DEFAULT_REMOTE_PORT,
 } from "./constants/remoteConstants";
 import { ContextManager } from "./context";
+import { TaskSyncIpcBridge } from "./mcp/ipcBridge";
+import { TaskSyncMcpServer } from "./mcp/mcpServer";
 import { RemoteServer } from "./server/remoteServer";
 import { getSafeErrorMessage } from "./server/serverUtils";
 import { registerTools } from "./tools";
 import { preloadBodyTemplate } from "./webview/lifecycleHandlers";
 import { TaskSyncWebviewProvider } from "./webview/webviewProvider";
 
+const DEFAULT_MCP_PORT = 3580;
+
 let webviewProvider: TaskSyncWebviewProvider | undefined;
 let contextManager: ContextManager | undefined;
 let remoteServer: RemoteServer | undefined;
+let mcpServer: TaskSyncMcpServer | undefined;
+let ipcBridge: TaskSyncIpcBridge | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
 	// Initialize context manager for #terminal, #problems features
@@ -42,6 +48,29 @@ export function activate(context: vscode.ExtensionContext): void {
 
 	// Register VS Code LM Tools (always available for Copilot)
 	registerTools(context, provider);
+
+	// Start MCP server for Antigravity and other MCP-compatible clients
+	mcpServer = new TaskSyncMcpServer(provider);
+	context.subscriptions.push({
+		dispose: () => {
+			mcpServer?.stop();
+		},
+	});
+	mcpServer.start(DEFAULT_MCP_PORT).catch((err) => {
+		console.error(
+			"[TaskSync] MCP server failed to start:",
+			getSafeErrorMessage(err),
+		);
+	});
+
+	// Start IPC bridge for file-based MCP communication (stdio bridge)
+	ipcBridge = new TaskSyncIpcBridge(provider);
+	context.subscriptions.push({
+		dispose: () => {
+			ipcBridge?.stop();
+		},
+	});
+	ipcBridge.start();
 
 	// Send current TaskSync input command (for Keyboard Shortcuts)
 	const sendMessageCmd = vscode.commands.registerCommand(
@@ -322,6 +351,18 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export async function deactivate(): Promise<void> {
+	// Stop IPC bridge
+	if (ipcBridge) {
+		ipcBridge.stop();
+		ipcBridge = undefined;
+	}
+
+	// Stop MCP server
+	if (mcpServer) {
+		mcpServer.stop();
+		mcpServer = undefined;
+	}
+
 	// Stop remote server
 	if (remoteServer) {
 		remoteServer.stop();
