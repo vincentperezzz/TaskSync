@@ -1,4 +1,4 @@
-import * as fs from "fs";
+import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import type { TaskSyncWebviewProvider } from "../webview/webviewProvider";
@@ -44,19 +44,17 @@ export class TaskSyncIpcBridge {
 	/**
 	 * Start watching the IPC directory for incoming requests.
 	 */
-	start(): void {
+	async start(): Promise<void> {
 		if (this.running) {
 			debugLog("[TaskSync IPC] Bridge already running");
 			return;
 		}
 
 		// Ensure IPC directory exists
-		if (!fs.existsSync(IPC_DIR)) {
-			fs.mkdirSync(IPC_DIR, { recursive: true });
-		}
+		await fs.mkdir(IPC_DIR, { recursive: true });
 
 		// Clean up any stale request/response files
-		this.cleanupStaleFiles();
+		await this.cleanupStaleFiles();
 
 		this.timer = setInterval(() => {
 			this.pollForRequests();
@@ -81,9 +79,9 @@ export class TaskSyncIpcBridge {
 	/**
 	 * Poll for new request files in the IPC directory.
 	 */
-	private pollForRequests(): void {
+	private async pollForRequests(): Promise<void> {
 		try {
-			const files = fs.readdirSync(IPC_DIR);
+			const files = await fs.readdir(IPC_DIR);
 			for (const file of files) {
 				if (
 					file.startsWith("request-") &&
@@ -107,7 +105,7 @@ export class TaskSyncIpcBridge {
 		const filepath = path.join(IPC_DIR, filename);
 
 		try {
-			const raw = fs.readFileSync(filepath, "utf-8");
+			const raw = await fs.readFile(filepath, "utf-8");
 			const request: BridgeRequest = JSON.parse(raw);
 
 			debugLog(
@@ -122,7 +120,7 @@ export class TaskSyncIpcBridge {
 
 			// Write response file
 			const responseFile = path.join(IPC_DIR, `response-${request.id}.json`);
-			fs.writeFileSync(responseFile, JSON.stringify(response));
+			await fs.writeFile(responseFile, JSON.stringify(response));
 
 			debugLog(`[TaskSync IPC] Response written for request ${request.id}`);
 		} catch (error) {
@@ -136,7 +134,7 @@ export class TaskSyncIpcBridge {
 			const match = filename.match(/^request-(.+)\.json$/);
 			if (match) {
 				const responseFile = path.join(IPC_DIR, `response-${match[1]}.json`);
-				fs.writeFileSync(
+				await fs.writeFile(
 					responseFile,
 					JSON.stringify({
 						session_id: "",
@@ -279,9 +277,9 @@ export class TaskSyncIpcBridge {
 	/**
 	 * Remove stale files (older than 5 minutes) from the IPC directory.
 	 */
-	private cleanupStaleFiles(): void {
+	private async cleanupStaleFiles(): Promise<void> {
 		try {
-			const files = fs.readdirSync(IPC_DIR);
+			const files = await fs.readdir(IPC_DIR);
 			const now = Date.now();
 			const STALE_MS = 5 * 60 * 1000;
 
@@ -291,9 +289,9 @@ export class TaskSyncIpcBridge {
 					file.endsWith(".json")
 				) {
 					const filepath = path.join(IPC_DIR, file);
-					const stat = fs.statSync(filepath);
+					const stat = await fs.stat(filepath);
 					if (now - stat.mtimeMs > STALE_MS) {
-						fs.unlinkSync(filepath);
+						await fs.unlink(filepath);
 						debugLog(`[TaskSync IPC] Cleaned up stale file: ${file}`);
 					}
 				}

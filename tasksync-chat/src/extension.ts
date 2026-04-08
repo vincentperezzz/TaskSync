@@ -70,7 +70,12 @@ export function activate(context: vscode.ExtensionContext): void {
 			ipcBridge?.stop();
 		},
 	});
-	ipcBridge.start();
+	ipcBridge.start().catch((err) => {
+		console.error(
+			"[TaskSync] IPC bridge failed to start:",
+			getSafeErrorMessage(err),
+		);
+	});
 
 	// Send current TaskSync input command (for Keyboard Shortcuts)
 	const sendMessageCmd = vscode.commands.registerCommand(
