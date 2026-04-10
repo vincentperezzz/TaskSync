@@ -3,6 +3,60 @@ import * as os from "os";
 import * as path from "path";
 import * as vscode from "vscode";
 
+/**
+ * Install the bundled mcp-expert workflow into Antigravity's global_workflows directory.
+ * Silently updates the workflow if the bundled version differs from the installed one.
+ */
+async function installWorkflow(
+	context: vscode.ExtensionContext,
+): Promise<void> {
+	const homeDir = os.homedir();
+	const antigravityDir = path.join(homeDir, ".gemini", "antigravity");
+	const workflowsDir = path.join(antigravityDir, "global_workflows");
+	const targetPath = path.join(workflowsDir, "mcp-expert.md");
+
+	// Source workflow bundled with the extension
+	const sourcePath = path.join(
+		context.extensionPath,
+		"workflows",
+		"mcp-expert.md",
+	);
+
+	// Verify the source file exists in the extension bundle
+	try {
+		await fs.stat(sourcePath);
+	} catch {
+		// Workflow not bundled (dev environment?), skip silently
+		return;
+	}
+
+	// Check if the Antigravity directory exists — if not, user doesn't have Antigravity
+	try {
+		await fs.stat(antigravityDir);
+	} catch {
+		return;
+	}
+
+	const bundledContent = await fs.readFile(sourcePath, "utf-8");
+
+	// Check if the workflow is already installed and up to date
+	try {
+		const existingContent = await fs.readFile(targetPath, "utf-8");
+		if (existingContent === bundledContent) {
+			// Already installed and up to date
+			return;
+		}
+	} catch {
+		// File doesn't exist yet, proceed with installation
+	}
+
+	// Ensure the global_workflows directory exists
+	await fs.mkdir(workflowsDir, { recursive: true });
+
+	// Write the workflow file
+	await fs.writeFile(targetPath, bundledContent, "utf-8");
+}
+
 export async function promptInstallAntigravityMcp(
 	context: vscode.ExtensionContext,
 ): Promise<void> {
@@ -18,6 +72,9 @@ export async function promptInstallAntigravityMcp(
 			// Directory doesn't exist, ignore
 			return;
 		}
+
+		// Install workflow file (silently, no prompt needed)
+		await installWorkflow(context);
 
 		// The path to the stdio bridge we want to configure
 		const bridgeScriptPath = path.join(
